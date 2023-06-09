@@ -26,7 +26,7 @@ const SearchP = ({ search, setSearch }) => {
       const data = response.data;
       const articleIds = data.esearchresult.idlist;
       
-      console.log('D: ',data);
+      console.log('D: ', data);
       console.log('Article IDs:', articleIds);
 
       const articles = await Promise.all(
@@ -38,15 +38,19 @@ const SearchP = ({ search, setSearch }) => {
                 params: {
                   db: 'pubmed',
                   id: articleId,
-                  retmode: 'json',
+                  retmode: 'xml',
                 },
               }
             );
 
-            const articleData = articleResponse.data.result[articleId];
-            const title = articleData.title;
-            const abstract = articleData.abstract;
-            const authors = articleData.authors;
+            const articleData = articleResponse.data;
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(articleData, 'text/xml');
+            const title = xmlDoc.querySelector('ArticleTitle')?.textContent;
+            const abstract = xmlDoc.querySelector('AbstractText')?.textContent;
+            const authors = Array.from(xmlDoc.querySelectorAll('Author')).map(
+              (authorNode) => authorNode.querySelector('LastName')?.textContent
+            );
 
             return { title, abstract, authors };
           } catch (error) {
@@ -56,7 +60,7 @@ const SearchP = ({ search, setSearch }) => {
         })
       );
 
-      // setResults(articles.filter((article) => article !== null)); // Filter out null articles
+      setResults(articles.filter((article) => article !== null)); // Filter out null articles
     } catch (error) {
       console.error('Error occurred during search:', error);
     }
@@ -74,7 +78,9 @@ const SearchP = ({ search, setSearch }) => {
               onChange={(e) => setQuery(e.target.value)}
             />
 
-            <button type="submit" className="ml-2 bg-gray-200 py-2 px-4 rounded">Search</button>
+            <button type="submit" className="ml-2 bg-gray-200 py-2 px-4 rounded">
+              Search
+            </button>
           </div>
 
           <svg
@@ -95,7 +101,7 @@ const SearchP = ({ search, setSearch }) => {
           results.map((article, index) => (
             <div key={index} className="mb-4">
               <h3 className="font-bold text-lg">{article.title}</h3>
-              <p className="text-gray-600">{article.authors}</p>
+              <p className="text-gray-600">{article.authors?.join(', ')}</p>
               <p>{article.abstract}</p>
             </div>
           ))
