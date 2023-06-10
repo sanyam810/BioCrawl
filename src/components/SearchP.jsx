@@ -106,7 +106,7 @@ const SearchP = ({ search, setSearch }) => {
             </div>
           ))
         ) : (
-          <p>No results found.</p>
+          <p className="text-center">No results</p>
         )}
       </div>
     </div>
