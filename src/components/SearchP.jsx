@@ -4,6 +4,8 @@ import axios from 'axios';
 const SearchP = ({ search, setSearch }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
 
   const handleSearch = async (e) => {
     e.preventDefault(); // Prevent form submission
@@ -16,7 +18,8 @@ const SearchP = ({ search, setSearch }) => {
             db: 'pubmed',
             term: query,
             retmode: 'json',
-            retmax: 10, // Number of results to retrieve
+            retmax: 10, // Number of results per page
+            retstart: (currentPage - 1) * 10, // Calculate the start index for the current page
           },
         }
       );
@@ -25,12 +28,14 @@ const SearchP = ({ search, setSearch }) => {
 
       const data = response.data;
       const articleIds = data.esearchresult.idlist;
-      
+
       console.log('D: ', data);
       console.log('Article IDs:', articleIds);
 
       const articles = await Promise.all(
         articleIds.map(async (articleId) => {
+          let articleData, title, abstract, authors, articleIdValue = '';
+
           try {
             const articleResponse = await axios.get(
               'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi',
@@ -43,27 +48,40 @@ const SearchP = ({ search, setSearch }) => {
               }
             );
 
-            const articleData = articleResponse.data;
+            articleData = articleResponse.data;
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(articleData, 'text/xml');
-            const title = xmlDoc.querySelector('ArticleTitle')?.textContent;
-            const abstract = xmlDoc.querySelector('AbstractText')?.textContent;
-            const authors = Array.from(xmlDoc.querySelectorAll('Author')).map(
+            title = xmlDoc.querySelector('ArticleTitle')?.textContent;
+            abstract = xmlDoc.querySelector('AbstractText')?.textContent;
+            authors = Array.from(xmlDoc.querySelectorAll('Author')).map(
               (authorNode) => authorNode.querySelector('LastName')?.textContent
             );
 
-            return { title, abstract, authors };
+            // Retrieve article ID
+            const articleIdElement = xmlDoc.querySelector('ArticleIdList ArticleId[IdType="pubmed"]');
+            articleIdValue = articleIdElement ? articleIdElement.textContent : '';
           } catch (error) {
             console.error(`Error retrieving article with ID ${articleId}:`, error);
             return null; // Skip the failed article
           }
+
+          return { articleId: articleIdValue, title, abstract, authors };
         })
       );
 
       setResults(articles.filter((article) => article !== null)); // Filter out null articles
+      setTotalPages(Math.ceil(data.esearchresult.count / 10)); // Calculate the total number of pages
     } catch (error) {
       console.error('Error occurred during search:', error);
     }
+  };
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+  };
+
+  const openArticle = (articleId) => {
+    window.open(`https://www.ncbi.nlm.nih.gov/pubmed/${articleId}`, '_blank');
   };
 
   return (
@@ -101,7 +119,12 @@ const SearchP = ({ search, setSearch }) => {
           results.map((article, index) => (
             <div key={index} className="mb-4">
               <h3 className="font-bold text-lg">{article.title}</h3>
-              <p className="text-gray-600">{article.authors?.join(', ')}</p>
+              <p className="text-gray-600">
+                <a href={`https://www.ncbi.nlm.nih.gov/pubmed/${article.articleId}`} target="_blank" rel="noopener noreferrer">
+                  {article.articleId}
+                </a>{' '}
+                - {article.authors?.join(', ')}
+              </p>
               <p>{article.abstract}</p>
             </div>
           ))
@@ -109,6 +132,28 @@ const SearchP = ({ search, setSearch }) => {
           <p className="text-center">No results</p>
         )}
       </div>
+
+      {results.length > 0 && (
+        <div className="flex justify-center mt-8">
+          {currentPage > 1 && (
+            <button
+              className="mr-4 bg-gray-200 py-2 px-4 rounded"
+              onClick={() => handlePageChange(currentPage - 1)}
+            >
+              Previous
+            </button>
+          )}
+
+          {currentPage < totalPages && (
+            <button
+              className="bg-gray-200 py-2 px-4 rounded"
+              onClick={() => handlePageChange(currentPage + 1)}
+            >
+              Next
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

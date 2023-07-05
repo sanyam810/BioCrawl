@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const SearchG = () => {
@@ -81,6 +81,8 @@ const SearchG = () => {
       const coordinates = entry.querySelector('GenomicInfo')?.querySelector('ChrStart')?.textContent || '';
       const mrnaTranscript = entry.querySelector('OtherAliases')?.querySelector('mrna')?.textContent || '';
       const proteinIsoform = entry.querySelector('OtherAliases')?.querySelector('protein')?.textContent || '';
+      const taxonomyId = extractTaxonomyId(xmlResponse, geneId);
+      const accessionNumber = extractAccessionNumber(xmlResponse, geneId);
 
       return {
         id: geneId,
@@ -92,11 +94,59 @@ const SearchG = () => {
         coordinates,
         transcript: mrnaTranscript,
         proteinIsoform,
+        taxonomyId,
+        accessionNumber,
       };
     });
 
     setResults(results);
   };
+
+  const extractTaxonomyId = (xmlResponse, geneId) => {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlResponse, 'text/xml');
+    const geneEntry = xmlDoc.querySelector(`Entrezgene > Entrezgene_track-info > Gene-track > Gene-track_geneid[text="${geneId}"]`)?.parentNode;
+  
+    if (geneEntry) {
+      const taxonomyIdNode = geneEntry.querySelector('Entrezgene_source > BioSource > Org-ref > Org-ref_db > Dbtag > Dbtag_db[text="taxon"] > Dbtag_tag > Object-id > Object-id_id');
+      return taxonomyIdNode ? taxonomyIdNode.textContent : '';
+    }
+  
+    return '';
+  };
+  
+  const extractAccessionNumber = (xmlResponse, geneId) => {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlResponse, 'text/xml');
+    const geneEntry = xmlDoc.querySelector(`Entrezgene > Entrezgene_track-info > Gene-track > Gene-track_geneid[text="${geneId}"]`)?.parentNode;
+  
+    if (geneEntry) {
+      const accessionNode = geneEntry.querySelector('Entrezgene_gene > Gene-ref > Gene-ref_locus');
+      return accessionNode ? accessionNode.textContent : '';
+    }
+  
+    return '';
+  };
+  
+  useEffect(() => {
+    const fetchTaxonomyAndAccessionForResults = async () => {
+      const resultsWithTaxonomyAndAccession = await Promise.all(
+        results.map(async (result) => {
+          const { geneId } = result;
+          const taxonomyId = await fetchTaxonomyId(xmlResponse, geneId);
+          const accessionNumber = await fetchAccessionNumber(xmlResponse, geneId);
+          return { ...result, taxonomyId, accessionNumber };
+        })
+      );
+  
+      setResults(resultsWithTaxonomyAndAccession);
+    };
+  
+    if (results.length > 0) {
+      fetchTaxonomyAndAccessionForResults();
+    }
+  }, [results]);
+  
 
   return (
     <div className="relative rounded-2xl bg-white px-6 pt-10 pb-8 shadow-xl ring-1 ring-gray-900/5 sm:mx-auto sm:max-w-lg sm:px-10">
@@ -144,6 +194,8 @@ const SearchG = () => {
               <p>Coordinates: {record.coordinates}</p>
               <p>mRNA Transcript: {record.transcript}</p>
               <p>Protein Isoform: {record.proteinIsoform}</p>
+              <p>Taxonomy ID: {record.taxonomyId}</p>
+              <p>Accession Number: {record.accessionNumber}</p>
             </div>
           ))
         ) : (
